@@ -1,4 +1,4 @@
-import { config, codeStore } from "./_store.js";
+import { config, codeStore, statsStore } from "./_store.js";
 
 export const configApi = { runtime: "nodejs" };
 
@@ -12,15 +12,18 @@ function parseBody(raw) {
   }
 }
 
+// 校验访客口令，通过则返回一次性短码
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   const method = req.method;
 
+  // —— 总开关状态（公开，前端用） ——
   if (method === "GET" && req.url.startsWith("/api/status")) {
     const c = await config.get();
     return res.status(200).json({ enabled: !!c.enabled, notice: c.notice || "" });
   }
 
+  // —— 访客：提交口令换取一次性短码 ——
   if (method === "POST" && req.url.startsWith("/api/enter")) {
     let body = parseBody(req.body);
     const c = await config.get();
@@ -30,32 +33,50 @@ export default async function handler(req, res) {
     if (body.pass !== c.pass) {
       return res.status(401).json({ error: "口令不正确，请确认后重试" });
     }
+    // 访问成功：记录一次当日访问
+    try { await statsStore.record(); } catch (e) {}
     const code = await codeStore.create(c.officialUrl);
     return res.status(200).json({ ok: true, code, target: `/go/${code}` });
   }
 
+  // —— 短码一次性消费跳转 ——
   if (method === "GET" && req.url.startsWith("/go/")) {
     const code = req.url.split("/go/")[1]?.split(/[?#]/)[0] || "";
     const c = await config.get();
     if (!c.enabled) {
       return html(res, 200, "服务已停用", "该迁移服务当前已停用，请联系管理员。");
     }
-    if (!code) return html(res, 400, "无效链接", "链接无效，请返回引导页重新获取。");
+    if (!code) return html(res, 400, "无效链接", "链接无效，请<a href='/'>返回引导页</a>重新获取。");
     const target = await codeStore.consume(code);
     if (!target) {
-      return html(res, 200, "链接已失效", "这个链接已使用或已过期，请返回引导页重新获取。");
+      return html(res, 200, "链接已失效", "这个链接已使用或已过期，请<a href='/'>返回引导页</a>重新获取。");
     }
     return res.redirect(302, target);
   }
 
+  // —— 访问统计（管理后台用，需管理口令）——
+  if (method === "GET" && req.url.startsWith("/api/stats")) {
+    const url = new URL(req.url, "http://x");
+    const adminPass = url.searchParams.get("adminPass") || "";
+    const c = await config.get();
+    if (adminPass !== c.adminPass) {
+      return res.status(403).json({ error: "管理口令不正确" });
+    }
+    const days = Math.min(Math.max(parseInt(url.searchParams.get("days") || "7", 10) || 7, 1), 30);
+    const daily = await statsStore.recent(days);
+    return res.status(200).json({ ok: true, daily });
+  }
+
+  // —— 不支持的请求 ——
   return res.status(404).json({ error: "Not Found" });
 }
 
 function html(res, status, title, msg) {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  const body = `<!doctype html><html lang=zh-CN><meta charset=utf-8><title>${title}</title>" +
-    "<body style=font-family:system-ui;background:#f2f5fa;color:#22304a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0>" +
-    "<div style=text-align:center;padding:30px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08)>" +
-    "<h2 style=margin:0 0 8px>${title}</h2><p style=margin:0;color:#6b7280>${msg}</p></div></body></html>`;
-  return res.status(status).send(body);
+  return res.status(status).send(
+    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${title}</title>
+    <body style="font-family:system-ui;background:#f2f5fa;color:#22304a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+    <div style="text-align:center;padding:30px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08)">
+      <h2 style="margin:0 0 8px">${title}</h2><p style="margin:0;color:#6b7280">${msg}</p></div></body></html>`
+  );
 }
