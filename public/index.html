@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>账号迁移引导 · CN 站 → AI 站</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei","PingFang SC",sans-serif; background: #f2f5fa; color: #22304a; line-height: 1.7; font-size: 15px; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  #gate { position: fixed; inset: 0; z-index: 999; background: linear-gradient(160deg,#1f4e79,#2e75b6); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  #gate.hidden { display: none; }
+  .gate-box { width: 100%; max-width: 400px; background: #fff; border-radius: 14px; padding: 34px 30px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .gate-box .lock { font-size: 40px; }
+  .gate-box h2 { margin-top: 8px; font-size: 20px; color: #1f4e79; }
+  .gate-box p { margin-top: 6px; font-size: 13.5px; color: #6b7280; }
+  .gate-box input { width: 100%; margin-top: 18px; padding: 12px 14px; font-size: 15px; border: 1.5px solid #d8e2ec; border-radius: 8px; outline: none; text-align: center; }
+  .gate-box input:focus { border-color: #2e75b6; }
+  .gate-box button { width: 100%; margin-top: 14px; padding: 12px; font-size: 15px; font-weight: 600; background: #1f4e79; color: #fff; border: none; border-radius: 8px; cursor: pointer; transition: background .2s; }
+  .gate-box button:hover { background: #2e75b6; }
+  .gate-err { color: #d33; font-size: 13px; margin-top: 10px; min-height: 20px; }
+  main { display: none; padding: 40px 0 60px; }
+  main.show { display: block; }
+  .banner { background: linear-gradient(160deg,#1f4e79,#2e75b6); color: #fff; border-radius:14px; padding: 30px 28px; margin-bottom: 24px; }
+  .banner h1 { font-size: 24px; letter-spacing: 1px; }
+  .banner p { margin-top: 10px; font-size: 14px; opacity: .92; }
+  .banner .warn { display: inline-block; margin-top: 14px; background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.35); border-radius:6px; padding:5px 12px; font-size:13px; }
+  .notice { background:#fff8e6; border:1px solid #f5d878; color:#7a5b00; border-radius:8px; padding:10px 16px; margin-bottom:18px; font-size:14px; }
+  .card { background:#fff; border:1px solid #e3eaf2; border-radius:12px; padding:24px 26px; margin-bottom:18px; }
+  .card h2 { font-size:17px; color:#1f4e79; display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .card h2 .no { width:24px; height:24px; border-radius:50%; background:#1f4e79; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex:0 0 auto; }
+  .card ul { list-style:none; }
+  .card ul li { position:relative; padding:5px 0 5px 20px; font-size:14.5px; }
+  .card ul li::before { content:""; position:absolute; left:0; top:14px; width:7px; height:7px; border-radius:2px; background:#2e75b6; }
+  .card ul li b { color:#1f4e79; }
+  .card ul li .hl { color:#d33; font-weight:600; }
+  .timeline { list-style:none; }
+  .timeline li { display:flex; gap:14px; padding:8px 0; font-size:14.5px; }
+  .timeline li .date { flex:0 0 175px; font-weight:700; color:#2e75b6; text-align:right; }
+  .timeline li .desc { color:#4b5563; }
+  .go-wrap { text-align:center; margin:30px 0 6px; }
+  .go-btn { display:inline-block; padding:15px 48px; font-size:17px; font-weight:700; background:linear-gradient(135deg,#1f4e79,#2e75b6); color:#fff; border-radius:999px; box-shadow:0 10px 30px rgba(31,78,121,.35); border:none; cursor:pointer; text-decoration:none; transition:transform .2s,box-shadow .2s; }
+  .go-btn:hover { transform:translateY(-2px); box-shadow:0 14px 38px rgba(31,78,121,.45); }
+  .go-tip { text-align:center; font-size:12.5px; color:#9aa5bd; margin-top:12px; }
+  footer { text-align:center; font-size:12.5px; color:#9aa5bd; padding:20px 0 34px; }
+  @media (max-width:560px){ .timeline li{flex-direction:column;gap:2px;} .timeline li .date{text-align:left;flex:none;} .banner h1{font-size:20px;} .go-btn{width:100%;} }
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="gate-box">
+    <div class="lock">🔒</div>
+    <h2>请输入访问口令</h2>
+    <p>本页面仅限受邀用户使用，口令请联系管理员获取</p>
+    <input type="password" id="pwInput" placeholder="输入访问口令" autocomplete="off">
+    <button id="pwBtn">进入页面</button>
+    <div class="gate-err" id="pwErr"></div>
+  </div>
+</div>
+
+<main id="main">
+  <div class="wrap">
+    <div class="banner">
+      <h1>账号迁移引导</h1>
+      <p>因平台架构升级，<b>CN 站部分模型 API 将于 2026 年 7 月 30 日永久停用</b>。未完成迁移的业务届时将直接调用失败，请尽早完成切换。</p>
+      <span class="warn">⚠️ 请务必在 2026-07-30 前完成迁移</span>
+    </div>
+    <div class="notice" id="noticeBox" style="display:none"></div>
+    <div class="card"><h2><span class="no">1</span>迁移关键时间节点</h2>
+      <ul class="timeline">
+        <li><span class="date">即日起 – 07-29</span><span class="desc">建议完成账号开通、接口联调、灰度测试、全量业务切换</span></li>
+        <li><span class="date">07-30 起</span><span class="desc"><span class="hl">CN 站部分模型 API 将关停</span>，不再提供任何调用与临时延期服务</span></li>
+      </ul>
+    </div>
+    <div class="card"><h2><span class="no">2</span>迁移说明</h2>
+      <ul>
+        <li><b>共享 API Key 迁移：</b>迁移后 AI 站保留与 CN 站完全一致的 API Key，业务代码只需切换调用站点；建议迁移后重新生成一组 Key</li>
+        <li><b>会员权益迁移：</b>AI 站仅以美金结算，迁入余额按上月最后一日人民币兑美金汇率折算入账</li>
+        <li><b>其他数据：</b>支持工作流、AI 应用一并迁移</li>
+        <li><b>账户范围：</b>自助迁移仅支持个人账户数据，团队数据请联系客服协助处理</li>
+      </ul>
+    </div>
+    <div class="card"><h2><span class="no">3</span>迁移步骤</h2>
+      <ul>
+        <li>点击下方按钮，前往<b>官方迁移工具</b></li>
+        <li>在官方页面中选择验证方式（邮箱密码 / 谷歌邮箱 / 手机号）登录 AI 站账户</li>
+        <li>确认迁移数据无误后提交，等待迁移完成</li>
+        <li>完成迁移后建议在 AI 站重新生成一组新 Key，避免新旧混淆</li>
+      </ul>
+    </div>
+    <div class="go-wrap">
+      <button class="go-btn" id="goBtn">前往官方迁移工具 →</button>
+    </div>
+    <div class="go-tip">为保证链路安全，跳转链接为一次性有效，请直接使用</div>
+  </div>
+  <footer>本页面为独立引导页 · 迁移服务由官方平台提供 · 数据请以官方页面为准</footer>
+</main>
+
+<script>
+var gate = document.getElementById('gate'), main = document.getElementById('main');
+var pwInput = document.getElementById('pwInput'), pwBtn = document.getElementById('pwBtn'), pwErr = document.getElementById('pwErr');
+var goBtn = document.getElementById('goBtn'), noticeBox = document.getElementById('noticeBox');
+var goTarget = sessionStorage.getItem('mg_go');
+
+// 若已在本会话获取过一次性短码，且口令已验证，直接进入主页面
+if (goTarget && sessionStorage.getItem('mg_ok') === '1') {
+  gate.classList.add('hidden'); main.classList.add('show');
+}
+
+// 查询开关状态
+fetch('/api/status').then(r=>r.json()).then(s=>{
+  if (s.notice) { noticeBox.style.display='block'; noticeBox.textContent = s.notice; }
+  if (s.enabled === false) { pwErr.textContent = '服务当前已停用，请联系管理员'; pwBtn.disabled = true; }
+}).catch(()=>{});
+
+// 口令验证成功 → 拿一次性短码入主页面
+function enter() {
+  pwBtn.disabled = true; pwErr.textContent = '验证中…';
+  fetch('/api/enter', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pass: pwInput.value }) })
+    .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || '验证失败'); return d; })
+    .then(d => {
+      sessionStorage.setItem('mg_ok', '1');
+      sessionStorage.setItem('mg_go', d.target);
+      goTarget = d.target;
+      gate.classList.add('hidden'); main.classList.add('show');
+    })
+    .catch(err => { pwErr.textContent = err.message; pwInput.value=''; pwInput.focus(); })
+    .finally(()=>{ pwBtn.disabled = false; });
+}
+pwBtn.addEventListener('click', enter);
+pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') enter(); });
+
+// 前往官方工具：直接使用已获取的一次性短码
+goBtn.addEventListener('click', function () {
+  if (!goTarget) { alert('请先通过口令验证'); return; }
+  window.location.href = goTarget;
+});
+</script>
+</body>
+</html>
