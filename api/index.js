@@ -102,18 +102,34 @@ function html(res, status, title, msg) {
   );
 }
 
-// 从 User-Agent 简单识别设备 / 浏览器类型
+// 从 User-Agent 识别设备 / 浏览器类型（含国内主流浏览器与 App 内置浏览器）
 function deviceFromUA(ua) {
   ua = ua || "";
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua) || (/Android/i.test(ua));
-  let browser = "";
-  if (/MicroMessenger/i.test(ua)) browser = "微信";
-  else if (/EdgA|Edg/i.test(ua)) browser = "Edge";
-  else if (/OPR|Opera/i.test(ua)) browser = "Opera";
-  else if (/Firefox/i.test(ua)) browser = "Firefox";
-  else if (/Chrome/i.test(ua)) browser = "Chrome";
-  else if (/Safari/i.test(ua)) browser = "Safari";
-  else browser = "未知";
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(ua);
+  // 顺序很重要：先匹配 App 内置/国产浏览器（它们大多也含 Chrome 字样），再匹配通用内核
+  const rules = [
+    [/MicroMessenger/i, "微信"],
+    [/QQ\/\d|QQBrowser|MQQBrowser/i, "QQ浏览器"],
+    [/UCBrowser|UBrowser/i, "UC浏览器"],
+    [/BIDUBrowser|Baidu/i, "百度浏览器"],
+    [/Sogou|MetaSr/i, "搜狗浏览器"],
+    [/HuaweiBrowser/i, "华为浏览器"],
+    [/MiuiBrowser/i, "小米浏览器"],
+    [/HeyTapBrowser/i, "OPPO浏览器"],
+    [/VivoBrowser/i, "vivo浏览器"],
+    [/SamsungBrowser/i, "三星浏览器"],
+    [/Weibo/i, "微博"],
+    [/aweme|BytedanceWebview|ByteFullSdk|news_article/i, "抖音/头条"],
+    [/EdgA|Edg/i, "Edge"],
+    [/OPR|Opera/i, "Opera"],
+    [/Firefox/i, "Firefox"],
+    [/Chrome|CriOS/i, "Chrome"],
+    [/Safari/i, "Safari"],
+  ];
+  let browser = "未知";
+  for (const [re, name] of rules) {
+    if (re.test(ua)) { browser = name; break; }
+  }
   return (isMobile ? "手机·" : "电脑·") + browser;
 }
 
