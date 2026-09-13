@@ -54,10 +54,13 @@ export const codeStore = {
   async consume(code) {
     const r = getRedis();
     const key = CODE_KEY(code);
-    const data = await r.hgetall(key);
-    if (!data || data.used === "1") return null;
+    // 按字段读取，避免 hgetall 返回值格式差异导致判断失效
+    const used = await r.hget(key, "used");
+    if (used === "1") return null;
+    const target = await r.hget(key, "target");
+    if (!target) return null;
     // 标记已用
     await r.hset(key, { used: "1" });
-    return data.target;
+    return target;
   },
 };
