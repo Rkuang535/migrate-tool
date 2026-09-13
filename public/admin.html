@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>迁移引导台 · 后台管理</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Microsoft YaHei","PingFang SC",sans-serif; background:#f2f5fa; color:#22304a; line-height:1.7; padding:40px 16px; font-size:15px; }
+  .card { max-width:560px; margin:0 auto 16px; background:#fff; border:1px solid #e3eaf2; border-radius:12px; padding:26px 28px; }
+  .card h2 { font-size:17px; color:#1f4e79; margin-bottom:16px; }
+  label { display:block; font-size:13.5px; color:#4b5563; margin:14px 0 6px; font-weight:600; }
+  input[type=text], input[type=password] { width:100%; padding:10px 12px; font-size:14px; border:1.5px solid #d8e2ec; border-radius:8px; outline:none; }
+  input:focus { border-color:#2e75b6; }
+  .row { display:flex; align-items:center; gap:10px; }
+  .switch { position:relative; width:46px; height:26px; }
+  .switch input { opacity:0; width:100%; height:100%; position:absolute; cursor:pointer; z-index:2; }
+  .slider { position:absolute; inset:0; background:#ccc; border-radius:999px; transition:.2s; }
+  .slider::before { content:""; position:absolute; left:3px; top:3px; width:20px; height:20px; background:#fff; border-radius:50%; transition:.2s; }
+  .switch input:checked + .slider { background:#1f4e79; }
+  .switch input:checked + .slider::before { transform:translateX(20px); }
+  button { margin-top:20px; padding:12px 20px; font-size:15px; font-weight:600; background:#1f4e79; color:#fff; border:none; border-radius:8px; cursor:pointer; }
+  button:hover { background:#2e75b6; }
+  .msg { margin-top:14px; font-size:14px; color:#1f8f4e; min-height:20px; }
+  .err { color:#d33; }
+  .hint { font-size:12.5px; color:#9aa5bd; margin-top:6px; }
+</style>
+</head>
+<body>
+
+<div class="card" id="adminGate">
+  <h2>后台管理登录</h2>
+  <label>管理口令</label>
+  <input type="password" id="aPass" placeholder="输入管理口令">
+  <button onclick="adminLogin()">登录</button>
+  <div class="msg err" id="aErr"></div>
+</div>
+
+<div class="card" id="adminPanel" style="display:none">
+  <h2>迁移引导台设置</h2>
+
+  <div class="row" style="justify-content:space-between">
+    <div><b>总开关</b><div class="hint">关闭后所有访客将被拦截</div></div>
+    <label class="switch"><input type="checkbox" id="enabled"><span class="slider"></span></label>
+  </div>
+
+  <label>访客口令</label>
+  <input type="text" id="pass" placeholder="访客进入口令">
+  <div class="hint">修改后立即生效，需重新部署的旧口令将失效</div>
+
+  <label>公告（可选，显示在引导页顶部）</label>
+  <input type="text" id="notice" placeholder="例：迁移窗口延长至 08-15">
+
+  <label>官方目标地址（一般无需修改）</label>
+  <input type="text" id="officialUrl" placeholder="https://...">
+
+  <button onclick="save()">保存设置</button>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+var ad = sessionStorage.getItem('mg_admin');
+if (ad === '1') { document.getElementById('adminPanel').style.display='block'; load(); }
+
+function adminLogin() {
+  var pwd = document.getElementById('aPass').value;
+  fetch('/api/admin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ adminPass: pwd }) })
+    .then(async r=>{ const d=await r.json(); if(!r.ok) throw new Error(d.error||'失败'); return d; })
+    .then(d=>{
+      sessionStorage.setItem('mg_admin','1');
+      sessionStorage.setItem('mg_adminPass', pwd);
+      document.getElementById('adminGate').style.display='none';
+      document.getElementById('adminPanel').style.display='block';
+      hydrate(d.config); document.getElementById('msg').textContent='登录成功';
+    })
+    .catch(e=>{ document.getElementById('aErr').textContent=e.message; });
+}
+
+function load() {
+  fetch('/api/admin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ adminPass: sessionStorage.getItem('mg_adminPass')||'' }) })
+    .then(async r=>{ const d=await r.json(); if(r.ok) hydrate(d.config); })
+    .catch(()=>{});
+}
+
+function hydrate(c) {
+  if(!c) return;
+  document.getElementById('enabled').checked = !!c.enabled;
+  // 口令不回显，留空由管理员手动填
+  if (c.notice) document.getElementById('notice').value = c.notice;
+}
+
+function save() {
+  var body = { adminPass: document.getElementById('aPass').value || sessionStorage.getItem('mg_adminPass') };
+  sessionStorage.setItem('mg_adminPass', body.adminPass);
+  body.enabled = document.getElementById('enabled').checked;
+  var p = document.getElementById('pass').value; if (p) body.pass = p;
+  var n = document.getElementById('notice').value; body.notice = n;
+  var u = document.getElementById('officialUrl').value; if (u) body.officialUrl = u;
+  fetch('/api/admin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+    .then(async r=>{ const d=await r.json(); if(!r.ok) throw new Error(d.error||'失败'); return d; })
+    .then(d=>{ document.getElementById('msg').textContent='保存成功，立即生效'; document.getElementById('msg').className='msg'; })
+    .catch(e=>{ document.getElementById('msg').textContent=e.message; document.getElementById('msg').className='msg err'; });
+}
+</script>
+</body>
+</html>
