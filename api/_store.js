@@ -11,6 +11,8 @@ const getRedis = () => {
 const CONFIG_KEY = "migration:config";
 const CODE_KEY = (code) => `migration:code:${code}`;
 const STAT_KEY = (day) => `migration:stat:${day}`; // 每天访问次数的 key
+const VISIT_KEY = "migration:visits"; // 访问明细列表 key
+const MAX_VISITS = 100; // 明细最多保留条数，防止无限增长
 
 // 返回当天日期字符串（Asia/IOC 格式 yyyy-mm-dd）
 function todayIDC() {
@@ -90,5 +92,27 @@ export const statsStore = {
       day,
       count: Number(result[idx] || 0),
     }));
+  },
+};
+
+// 访问明细：记录每次成功进入人的时间 / IP / 设备 / 归属地，最多保留 MAX_VISITS 条
+export const visitStore = {
+  async add({ ip, device, loc }) {
+    const r = getRedis();
+    const now = new Date();
+    const local = new Date(now.getTime() + 8 * 3600 * 1000);
+    const time = local.toISOString().slice(0, 19).replace("T", " ");
+    const item = { time, ip: ip || "未知", device: device || "未知", loc: loc || "未知" };
+    // 头插法：最新记录在最前；再裁掉超出条数，避免无限增长
+    await r.lpush(VISIT_KEY, JSON.stringify(item));
+    await r.ltrim(VISIT_KEY, 0, MAX_VISITS - 1);
+  },
+  // 读取最近的明细（第 0 条为最新）
+  async recent(limit = 100) {
+    const r = getRedis();
+    const arr = await r.lrange(VISIT_KEY, 0, Math.max(1, limit) - 1);
+    return arr
+      .map((s) => { try { return JSON.parse(s); } catch { return null; } })
+      .filter(Boolean);
   },
 };

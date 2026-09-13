@@ -1,4 +1,4 @@
-import { config, codeStore, statsStore } from "./_store.js";
+import { config, codeStore, statsStore, visitStore } from "./_store.js";
 
 export const configApi = { runtime: "nodejs" };
 
@@ -33,8 +33,16 @@ export default async function handler(req, res) {
     if (body.pass !== c.pass) {
       return res.status(401).json({ error: "口令不正确，请确认后重试" });
     }
-    // 访问成功：记录一次当日访问
+    // 访问成功：记录当日访问统计 + 访问明细（时间/IP/设备/归属地）
     try { await statsStore.record(); } catch (e) {}
+    try {
+      const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim()
+        || req.headers["x-real-ip"] || "";
+      const ua = req.headers["user-agent"] || "";
+      const device = deviceFromUA(ua);
+      const loc = await ipLocate(ip);
+      await visitStore.add({ ip, device, loc });
+    } catch (e) {}
     const code = await codeStore.create(c.officialUrl);
     return res.status(200).json({ ok: true, code, target: `/go/${code}` });
   }
@@ -67,6 +75,19 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, daily });
   }
 
+  // —— 访问明细（管理后台用，需管理口令）——
+  if (method === "GET" && req.url.startsWith("/api/visits")) {
+    const url = new URL(req.url, "http://x");
+    const adminPass = url.searchParams.get("adminPass") || "";
+    const c = await config.get();
+    if (adminPass !== c.adminPass) {
+      return res.status(403).json({ error: "管理口令不正确" });
+    }
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "100", 10) || 100, 1), 100);
+    const visits = await visitStore.recent(limit);
+    return res.status(200).json({ ok: true, visits });
+  }
+
   // —— 不支持的请求 ——
   return res.status(404).json({ error: "Not Found" });
 }
@@ -79,4 +100,41 @@ function html(res, status, title, msg) {
     <div style="text-align:center;padding:30px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08)">
       <h2 style="margin:0 0 8px">${title}</h2><p style="margin:0;color:#6b7280">${msg}</p></div></body></html>`
   );
+}
+
+// 从 User-Agent 简单识别设备 / 浏览器类型
+function deviceFromUA(ua) {
+  ua = ua || "";
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua) || (/Android/i.test(ua));
+  let browser = "";
+  if (/MicroMessenger/i.test(ua)) browser = "微信";
+  else if (/EdgA|Edg/i.test(ua)) browser = "Edge";
+  else if (/OPR|Opera/i.test(ua)) browser = "Opera";
+  else if (/Firefox/i.test(ua)) browser = "Firefox";
+  else if (/Chrome/i.test(ua)) browser = "Chrome";
+  else if (/Safari/i.test(ua)) browser = "Safari";
+  else browser = "未知";
+  return (isMobile ? "手机·" : "电脑·") + browser;
+}
+
+// 通过 ip-api 免费接口查询归属地（尽力而为，失败返回"未知"）
+async function ipLocate(ip) {
+  if (!ip || ip === "::1" || ip === "127.0.0.1" || ip.startsWith("10.") ||
+      ip.startsWith("192.168.") || ip.startsWith("172.16.")) {
+    return "内网/本机";
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2500);
+  try {
+    const r = await fetch(`https://ipapi.co/${ip}/json/`, { signal: ctrl.signal });
+    const d = await r.json();
+    if (d && d.city) {
+      return [d.country_name, d.region, d.city].filter(Boolean).join(" ");
+    }
+  } catch (e) {
+    // 网络失败或接口限流则放弃
+  } finally {
+    clearTimeout(timer);
+  }
+  return "未知";
 }
