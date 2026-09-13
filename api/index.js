@@ -133,24 +133,47 @@ function deviceFromUA(ua) {
   return (isMobile ? "手机·" : "电脑·") + browser;
 }
 
-// 通过 ip-api 免费接口查询归属地（尽力而为，失败返回"未知"）
+// 查询 IP 归属地：多个免费接口并发竞速，任一返回城市即用；全部失败返回"未知"
 async function ipLocate(ip) {
-  if (!ip || ip === "::1" || ip === "127.0.0.1" || ip.startsWith("10.") ||
-      ip.startsWith("192.168.") || ip.startsWith("172.16.")) {
+  if (!ip || ip === "::1" || ip === "127.0.0.1" ||
+      ip.startsWith("10.") || ip.startsWith("192.168.")) {
     return "内网/本机";
   }
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 2500);
-  try {
-    const r = await fetch(`https://ipapi.co/${ip}/json/`, { signal: ctrl.signal });
-    const d = await r.json();
-    if (d && d.city) {
-      return [d.country_name, d.region, d.city].filter(Boolean).join(" ");
+  const getJSON = async (url, ms = 2800) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+      return await r.json();
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timer);
     }
+  };
+  const sources = [
+    // 国内 IP 识别准、直接返回中文城市名（免费版仅 http，服务器外呼可用）
+    async () => {
+      const d = await getJSON(`http://ip-api.com/json/${encodeURIComponent(ip)}?lang=zh-CN&fields=status,country,regionName,city`);
+      if (d && d.status === "success" && d.city) return [d.country, d.regionName, d.city].filter(Boolean).join(" ");
+      throw new Error("no-city");
+    },
+    // https 免费、对机房 IP 友好
+    async () => {
+      const d = await getJSON(`https://ipwho.is/${encodeURIComponent(ip)}`);
+      if (d && d.success !== false && d.city) return [d.country, d.region, d.city].filter(Boolean).join(" ");
+      throw new Error("no-city");
+    },
+    // 兜底
+    async () => {
+      const d = await getJSON(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, 2000);
+      if (d && d.city) return [d.country_name, d.region, d.city].filter(Boolean).join(" ");
+      throw new Error("no-city");
+    },
+  ];
+  try {
+    return await Promise.any(sources.map((fn) => fn()));
   } catch (e) {
-    // 网络失败或接口限流则放弃
-  } finally {
-    clearTimeout(timer);
+    return "未知";
   }
-  return "未知";
 }
