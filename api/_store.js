@@ -45,22 +45,15 @@ export const codeStore = {
     const r = getRedis();
     const rand = randomUUID().replace(/-/g, "").slice(0, 8);
     const key = CODE_KEY(rand);
-    // hash: target + used 标记
-    await r.hset(key, { target, used: "0", ts: String(Date.now()) });
-    await r.expire(key, ttlSeconds);
+    // 直接以字符串存储并设置过期，消费时用 GETDEL 原子删除，天然一次性
+    await r.set(key, target, { ex: ttlSeconds });
     return rand;
   },
-  // 消费，若已用过或不存在返回 null
+  // 消费：原子读取并删除；已使用或不存在返回 null
   async consume(code) {
     const r = getRedis();
     const key = CODE_KEY(code);
-    // 按字段读取，避免 hgetall 返回值格式差异导致判断失效
-    const used = await r.hget(key, "used");
-    if (used === "1") return null;
-    const target = await r.hget(key, "target");
-    if (!target) return null;
-    // 标记已用
-    await r.hset(key, { used: "1" });
+    const target = await r.getdel(key);
     return target;
   },
 };
