@@ -8,6 +8,7 @@
     { "source": "/", "destination": "/index.html" },
     { "source": "/admin", "destination": "/admin.html" },
     { "source": "/api/status", "destination": "/api" },
-    { "source": "/api/enter", "destination": "/api" }
+    { "source": "/api/enter", "destination": "/api" },
+    { "source": "/go/:path*", "destination": "/api" }
   ]
 }
