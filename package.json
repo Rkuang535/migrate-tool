@@ -1,0 +1,13 @@
+{
+  "name": "migration-redirect",
+  "version": "1.0.0",
+  "private": true,
+  "description": "带口令验证与一次性短链防传播的账号迁移引导台（Vercel）",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.3"
+  }
+}
