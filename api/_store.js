@@ -11,7 +11,7 @@ const getRedis = () => {
 const CONFIG_KEY = "migration:config";
 const CODE_KEY = (code) => `migration:code:${code}`;
 const STAT_KEY = (day) => `migration:stat:${day}`; // 每天访问次数的 key
-const VISIT_KEY = "migration:visits"; // 访问明细列表 key
+const VISIT_KEY = "migration:visits:v2"; // 访问明细 key（v2 用单字符串存 JSON 数组；v1 是 list 类型，与 GET 类型冲突，故弃用）
 const MAX_VISITS = 100; // 明细最多保留条数，防止无限增长
 
 // 返回当天日期字符串（Asia/IOC 格式 yyyy-mm-dd）
@@ -96,6 +96,8 @@ export const statsStore = {
 };
 
 // 访问明细：记录每次成功进入人的时间 / IP / 设备 / 归属地，最多保留 MAX_VISITS 条
+// 用单个 string key 存整段 JSON 数组（与 config 存储同构，已验证可靠），
+// 不使用 list：@upstash/redis 会自动反序列化 lrange 的元素，再 JSON.parse 会得到空数组
 export const visitStore = {
   async add({ ip, device, loc }) {
     const r = getRedis();
@@ -103,16 +105,38 @@ export const visitStore = {
     const local = new Date(now.getTime() + 8 * 3600 * 1000);
     const time = local.toISOString().slice(0, 19).replace("T", " ");
     const item = { time, ip: ip || "未知", device: device || "未知", loc: loc || "未知" };
-    // 头插法：最新记录在最前；再裁掉超出条数，避免无限增长
-    await r.lpush(VISIT_KEY, JSON.stringify(item));
-    await r.ltrim(VISIT_KEY, 0, MAX_VISITS - 1);
+    // 读出当前数组（兼容 SDK 自动反序列化成数组、或返回原始字符串两种情况）
+    let list = [];
+    try {
+      const cur = await r.get(VISIT_KEY);
+      if (Array.isArray(cur)) list = cur;
+      else if (typeof cur === "string") {
+        const p = JSON.parse(cur);
+        if (Array.isArray(p)) list = p;
+      }
+    } catch (e) { list = []; }
+    // 头插法：最新记录在最前；裁掉超出条数，避免无限增长
+    list.unshift(item);
+    if (list.length > MAX_VISITS) list = list.slice(0, MAX_VISITS);
+    // 显式存字符串，不依赖 SDK 对数组的自动序列化
+    await r.set(VISIT_KEY, JSON.stringify(list));
   },
   // 读取最近的明细（第 0 条为最新）
   async recent(limit = 100) {
     const r = getRedis();
-    const arr = await r.lrange(VISIT_KEY, 0, Math.max(1, limit) - 1);
-    return arr
-      .map((s) => { try { return JSON.parse(s); } catch { return null; } })
-      .filter(Boolean);
+    try {
+      const cur = await r.get(VISIT_KEY);
+      let list = [];
+      if (Array.isArray(cur)) list = cur;
+      else if (typeof cur === "string") {
+        const p = JSON.parse(cur);
+        if (Array.isArray(p)) list = p;
+      }
+      return list
+        .slice(0, Math.max(1, limit))
+        .filter((x) => x && typeof x === "object");
+    } catch (e) {
+      return [];
+    }
   },
 };
