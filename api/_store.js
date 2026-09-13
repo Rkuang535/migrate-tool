@@ -10,6 +10,14 @@ const getRedis = () => {
 
 const CONFIG_KEY = "migration:config";
 const CODE_KEY = (code) => `migration:code:${code}`;
+const STAT_KEY = (day) => `migration:stat:${day}`; // 每天访问次数的 key
+
+// 返回当天日期字符串（Asia/IOC 格式 yyyy-mm-dd）
+function todayIDC() {
+  const now = new Date();
+  const local = new Date(now.getTime() + 8 * 3600 * 1000);
+  return local.toISOString().slice(0, 10);
+}
 
 const DEFAULT_CONFIG = {
   enabled: true,        // 总开关：false 时所有跳转/进入都关闭
@@ -55,5 +63,32 @@ export const codeStore = {
     const key = CODE_KEY(code);
     const target = await r.getdel(key);
     return target;
+  },
+};
+
+// 访问统计：记录每天通过访客口令成功进入页面的人数
+export const statsStore = {
+  // 今日访问次数 +1（每天一个独立 key，天然按月滚动保留）
+  async record() {
+    const r = getRedis();
+    const key = STAT_KEY(todayIDC());
+    return r.incr(key); // 返回自增后的值
+  },
+  // 读取最近 N 天的访问记录，返回 [{day, count}]（按日期升序）
+  async recent(days = 7) {
+    const r = getRedis();
+    const dates = [];
+    const now = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 3600 * 1000);
+      const local = new Date(d.getTime() + 8 * 3600 * 1000);
+      dates.push(local.toISOString().slice(0, 10));
+    }
+    // 批量取，避免 N+1 请求
+    const result = await r.mget(dates.map((day) => STAT_KEY(day)));
+    return dates.map((day, idx) => ({
+      day,
+      count: Number(result[idx] || 0),
+    }));
   },
 };
