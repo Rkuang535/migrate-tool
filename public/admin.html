@@ -24,6 +24,11 @@
   .msg { margin-top:14px; font-size:14px; color:#1f8f4e; min-height:20px; }
   .err { color:#d33; }
   .hint { font-size:12.5px; color:#9aa5bd; margin-top:6px; }
+  .stat-tbl { width:100%; border-collapse:collapse; margin-top:6px; font-size:14px; }
+  .stat-tbl th, .stat-tbl td { border:1px solid #e3eaf2; padding:8px 12px; text-align:center; }
+  .stat-tbl th { background:#1f4e79; color:#fff; font-weight:600; }
+  .stat-tbl td { color:#22304a; }
+  .stat-tbl .num { font-weight:700; color:#1f4e79; }
 </style>
 </head>
 <body>
@@ -58,9 +63,18 @@
   <div class="msg" id="msg"></div>
 </div>
 
+<div class="card" id="statCard" style="display:none">
+  <h2>访问统计（每日成功进入人数）</h2>
+  <table class="stat-tbl">
+    <thead><tr><th>日期</th><th>人数</th></tr></thead>
+    <tbody id="statBody"></tbody>
+  </table>
+  <button style="margin-top:16px" onclick="loadStats()">刷新统计</button>
+</div>
+
 <script>
 var ad = sessionStorage.getItem('mg_admin');
-if (ad === '1') { document.getElementById('adminPanel').style.display='block'; load(); }
+if (ad === '1') { document.getElementById('adminPanel').style.display='block'; document.getElementById('statCard').style.display='block'; load(); loadStats(); }
 
 function adminLogin() {
   var pwd = document.getElementById('aPass').value;
@@ -71,9 +85,27 @@ function adminLogin() {
       sessionStorage.setItem('mg_adminPass', pwd);
       document.getElementById('adminGate').style.display='none';
       document.getElementById('adminPanel').style.display='block';
+      document.getElementById('statCard').style.display='block';
       hydrate(d.config); document.getElementById('msg').textContent='登录成功';
+      loadStats();
     })
     .catch(e=>{ document.getElementById('aErr').textContent=e.message; });
+}
+
+function loadStats() {
+  var ap = document.getElementById('aPass').value || sessionStorage.getItem('mg_adminPass') || '';
+  fetch('/api/stats?adminPass=' + encodeURIComponent(ap) + '&days=7')
+    .then(async r=>{ const d=await r.json(); if(!r.ok) throw new Error(d.error||'失败'); return d; })
+    .then(d=>{
+      var tb = document.getElementById('statBody');
+      tb.innerHTML = '';
+      (d.daily||[]).concat().reverse().forEach(function(item){
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>'+item.day+'</td><td class="num">'+item.count+'</td>';
+        tb.appendChild(tr);
+      });
+    })
+    .catch(e=>{ /* 统计加载失败静默处理 */ });
 }
 
 function load() {
