@@ -1,9 +1,12 @@
 import { Redis } from "@upstash/redis";
 import { randomUUID } from "node:crypto";
 
-// 使用环境变量初始化 Upstash Redis（Vercel KV）
-const getRedis = () =>
-  Redis.fromEnv();
+// 使用环境变量初始化 Upstash Redis（兼容 Vercel KV 与 Upstash 两套变量名）
+const getRedis = () => {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  return new Redis({ url, token });
+};
 
 const CONFIG_KEY = "migration:config";
 const CODE_KEY = (code) => `migration:code:${code}`;
